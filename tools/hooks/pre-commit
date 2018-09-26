@@ -1,0 +1,227 @@
+#!/bin/bash
+# Copyright (c) 2018 David 'Mokon' Bond <mokon@mokon.net>
+# Author: David 'Mokon' Bond <mokon@mokon.net>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+. tools/colors
+
+function main {
+    rc=0
+    exec 1>&2
+
+    set_root
+    pushd $root &> /dev/null
+    set_against
+
+    mkdir -p $root/build
+    process_files
+    if ! print_results ; then
+        rc=1
+    fi
+
+    git_checks
+
+    popd &> /dev/null
+    return $rc
+}
+
+function process_files {
+    failures=()
+    for file in $(get_files) ; do
+        local dirname=$(dirname $file)
+        if [ ! -f $file ]; then
+            failmsg "file no longer exists or not a regular file\n"
+        elif [[ "$file" =~ \.[ch]p?p?$ ]] ; then
+            get_commit_file
+
+            testcase "const rvalue references" "const\ ([a-zA-Z_][a-zA-Z0-9_]+)&&" 0
+            testcase "space around paren" "(\(\ )|(\ \))" 0
+            testcase "space before semi-colon" "\ ;" 0
+            testcase "logical or" "\|\|" 0
+            #testcase "logical and" "&&[^)]" 0
+            testcase "includes using quotes" '#include\ "' 0
+            cppcheck_static_analyzer
+            check_code_format $file $dirname
+
+            /bin/rm $commit_file
+        fi
+    done
+}
+
+function check_code_format {
+    local file=$1
+    local dirname=$2
+
+    /usr/bin/clang-format -i --style=file $file
+    if ! git diff --quiet $file ; then
+        fail "code format" "invalid"
+    fi
+}
+
+function testcase {
+    local message=$1
+    local check="$2"
+    local expected=$3
+
+    output=$(grep -Pn "$check" $commit_file ; exit $?)
+    result=$?
+    if [ $result -eq $expected ]; then
+        while read -r line; do
+            fail "$message" "$line"
+        done <<< "$output"
+    fi
+}
+
+function cppcheck_static_analyzer {
+    local cppcheck_new_supp=build/cppcheck_new.supp
+    local cpperrors=`mktemp`
+
+    touch $cppcheck_new_supp
+    touch $root/tools/suppressions/cppcheck.supp
+
+    local includes="-I src"
+
+    cppcheck -q $includes \
+             --inconclusive --std=c++11 --language=c++ \
+             --suppressions-list=$root/tools/suppressions/cppcheck.supp \
+             --suppress=missingIncludeSystem --enable=all \
+             --template='{line}: {message} Suppression: {id}:{file}:{line}' \
+             --error-exitcode=1 \
+             $commit_file 2> $cpperrors
+
+    if [ -s $cpperrors ]; then
+        while read line; do
+            if [[ ! $line =~ "unmatchedSupp" && ! $line =~ ^\ +$ ]] ; then
+                if [[ $line =~ "Suppression: " ]] ; then
+                    local new_supp=$(echo "$line" | sed 's/^.*Suppression: //p')
+                    new_supp="${new_supp//"$commit_file"/"$file_pattern"}"
+                    echo "$new_supp" >> $cppcheck_new_supp
+                    line=`echo -n "$line" | sed 's/Suppression: .*$//'`
+                fi
+                fail "cppcheck" "$line"
+            fi
+        done < $cpperrors
+    fi
+    rm $cpperrors
+
+    local tmp=`mktemp`
+    sort $cppcheck_new_supp | uniq > $tmp
+    /bin/mv $tmp $cppcheck_new_supp
+}
+
+function fail {
+    local message=$1
+    local output=$2
+
+    failures+=("$message: $file:$output")
+}
+
+function print_results {
+    if [ ${#failures[@]} -ne 0 ]; then
+        infomsg "\nTest Failures\n\n"
+        for failure in "${failures[@]}" ; do
+            failmsg "\t$failure\n"
+        done
+        return 1
+    fi
+}
+
+function get_files {
+    if is_git_controlled ; then
+        git diff-index --cached --name-only $against
+    else
+        find ./src -name "*.[hc]pp" -printf 'src/%P\n'
+    fi
+}
+
+function git_checks {
+    if is_git_controlled ; then
+        if test $(git diff --cached --name-only --diff-filter=A -z $against |
+            LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0 ; then
+            rc=-1
+        fi
+
+        if git rev-parse --verify HEAD ; then
+            exec git diff-index --check --cached HEAD
+        fi
+    fi
+}
+
+function set_root {
+    root=`git rev-parse --show-toplevel 2> /dev/null`
+    if [ $? -ne 0 ] ; then
+        root=.
+    fi
+    export root
+}
+
+function is_git_controlled {
+    git rev-parse --show-toplevel &> /dev/null
+    false
+}
+
+function is_commit_ammend {
+    local amend_re='.*commit.*--amend'
+    local cmd=`ps -ocommand= -p $PPID`
+    if [[ "$cmd" =~ $amend_re ]] ; then
+        return 0
+    else
+        local alsout=`git config --get-regexp '^alias\..*' "$amend_re"`
+        if [ $? == 0 ] ; then
+            local als=`echo $alsout | sed -n 's/alias\.\(.*\)/\1/p' \
+              | awk '{print $1}'`
+            local als_re="git\s$als"
+            if [[ "$cmd" =~ $als_re ]] ; then
+                return 0
+            fi
+        fi
+    fi
+    return 1
+}
+
+function set_against {
+    if is_git_controlled ; then
+        if git rev-parse --verify HEAD >/dev/null 2>&1 ; then
+            if is_commit_ammend ; then
+                export against=HEAD~1
+            else
+                export against=HEAD
+            fi
+        else
+            export against=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+        fi
+    fi
+}
+
+function get_commit_file {
+    commit_file=$(mktemp -p $(dirname $file) --suffix=$(basename $file))
+    file_pattern="$(dirname $file)/*$(basename $file)"
+
+    if is_git_controlled ; then
+        git show :$file > $commit_file
+    else
+        cat $file > $commit_file
+    fi
+}
+
+if main ; then
+  infomsg "pre-commit pass\n"
+else
+  exit -1
+fi

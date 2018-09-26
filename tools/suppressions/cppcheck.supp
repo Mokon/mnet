@@ -1,0 +1,6 @@
+unusedFunction
+unusedStructMember
+preprocessorErrorDirective
+uninitMemberVar:src/apmmon/events/*Event.cpp:27
+uninitMemberVar:src/apmmon/linux/*Poller.cpp:9
+syntaxError

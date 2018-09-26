@@ -1,0 +1,16 @@
+{
+   tbb globals
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN3tbb8internal12NFS_AllocateEmmPv
+   ...
+}
+{
+   gflag globals
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN6google14FlagRegistererC1EPKcS2_S2_S2_PvS3_
+   ...
+}

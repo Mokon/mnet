@@ -1,0 +1,38 @@
+git git git git
+make make make make
+bash bash bash bash
+gtest-devel gtest-dev gtest-dev gtest-devel
+cmake emake cmake cmake
+clang-devel clang-dev clang-dev clang-devel
+gcc gcc gcc gcc
+gcc-c++ g++ g++ gcc-c++
+libcap-devel libcap-dev libcap-dev libcap-devel
+mingw32-gcc mingw32-gcc mingw32-gcc mingw32-gcc
+mingw32-gcc-c++ mingw32-gcc-c++ mingw32-gcc-c++ mingw32-gcc-c++
+mingw64-gcc mingw64-gcc mingw64-gcc mingw64-gcc
+mingw64-gcc-c++ mingw64-gcc-c++ mingw64-gcc-c++ mingw64-gcc-c++
+automake automake automake automake
+boost-devel libboost-all-dev libboost-all-dev boost-devel
+glog-devel libgoogle-glog-dev libgoogle-glog-dev glog-devel
+double-conversion-devel libdouble-conversion-dev libdouble-conversion-dev double-conversion-devel
+libunwind8-dev libunwind8-dev libunwind8-dev libunwind8-dev
+libelf-dev libelf-dev libelf-dev libelf-dev
+libdwarf-dev libdwarf-dev libdwarf-dev libdwarf-dev
+libevent-devel libevent-dev libevent-dev libevent-devel
+snappy-devel libsnappy-dev libsnappy-dev snappy-devel
+skip libgflags-dev
+skip libiberty-dev
+skip liblz4-dev
+skip liblzma-dev
+skip zlib1g-dev
+skip binutils-dev
+skip libjemalloc-dev
+skip libssl-dev
+skip pkg-config
+libtool skip
+lz4-devel skip
+lzma-devel skip
+zlib-devel skip
+gflags-devel skip
+scons skip
+openssl-devel skip

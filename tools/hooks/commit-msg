@@ -1,0 +1,199 @@
+#!/usr/bin/perl
+# Copyright (c) 2018 David 'Mokon' Bond <mokon@mokon.net>
+# Author: David 'Mokon' Bond <mokon@mokon.net>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+use strict;
+use warnings;
+use Term::ANSIColor;
+use Text::SpellChecker;
+
+my $subject_char_min = 10;
+my $subject_char_max = 50;
+my $body_char_limit  = 72;
+my $email_re         = qr/<.*?\@.*?>/;
+
+my $exit_code = 0;
+
+sub test {
+    my ( $string, $regex, $desc ) = @_;
+
+    if ( $string =~ $regex ) {
+        pass_message($desc);
+    }
+    else {
+        fail_message($desc);
+    }
+}
+
+sub pass_message {
+    my ($desc) = @_;
+    print color("green"), "PASS:", color("reset"), " $desc\n";
+}
+
+sub warn_message {
+    my ($desc) = @_;
+    print color("yellow"), "WARN:", color("reset"), " $desc\n";
+}
+
+sub fail_message {
+    my ($desc) = @_;
+    print color("red"), "FAIL:", color("reset"), " $desc\n";
+    $exit_code = -1;
+}
+
+sub spellcheck {
+    my ( $string, $desc ) = @_;
+
+    my $checker = Text::SpellChecker->new( text => $string );
+    while ( my $word = $checker->next_word ) {
+        my $result =
+            "$desc for "
+          . $checker->current_word . ","
+          . "\n\tsuggestions: @{$checker->suggestions}";
+        warn_message($result);
+    }
+}
+
+sub review_commit {
+    my ( $commit, $sha1 ) = @_;
+
+    my $commit_msg = "";
+    print color("blue"), "Reviewing Commit:", color("reset"), " $sha1\n";
+
+    if (
+        $commit =~ /^tree\ (\b[0-9a-f]{5,40}\b)\n
+    (?:parent\ \b[0-9a-f]{5,40}\b\n)+
+    author\ .*?(<.*?@.*?>).*?\n
+    committer\ .*?(<.*?@.*?>).*?\n
+    \n(.*)$/sx
+      )
+    {
+        my $commit_hash     = $1;
+        my $author_email    = $2;
+        my $committer_email = $3;
+        $commit_msg = $4;
+    }
+    else {
+        $commit_msg = $commit;
+        $commit_msg =~ s/[#].*$//s;
+    }
+
+    if ( $commit_msg =~ /^Merge\ (.*)$/sx ) {
+        pass_message("merge commit, ignoring commit log.");
+    }
+    elsif (
+        $commit_msg =~ /^
+      (?=(?:.*(?:Signed-off-by):\ (.*?)\n)?)
+      (?=(?:.*Reviewed-By:\ (.*?)\n[^\s-])?)
+      ^(.*?)(?:\n)(.*?)
+      (?:Signed-off-by|Reviewed-By)
+      (?:.*)$/sx
+      )
+    {
+        my $subject_line = $3;
+        my $description  = $4;
+        my $signed_off_by = $1;
+        my $review       = $2;
+
+        test( $subject_line, qr/^.{$subject_char_min,$subject_char_max}$/,
+                "subject line must contain >= $subject_char_min chars"
+              . " and <= $subject_char_max chars" );
+        test( $subject_line, qr/^(.*[^.])$/,
+            "subject line must not end with a period" );
+        test( $subject_line, qr/^((?!^(s|S)ubject:).)*$/,
+            "subject line must not contain the header subject" );
+        spellcheck( $subject_line, "subject line spelling check" );
+
+        if ( !defined($description) ) {
+            fail_message("a description must be included");
+        }
+        else {
+            spellcheck( $description, "description spelling check" );
+            warn_message(  "ensure your subject line and description are descriptive."
+                  . "\n\tThese can't be checked with a regex!" );
+            test(
+                $description,
+                qr/^((?!^(d|D)escription:).)*$/s,
+                "description must not contain the header description"
+            );
+
+            foreach my $line ( split( /\n/, $description ) ) {
+                if ( $line !~ /^.{0,$body_char_limit}$/ ) {
+                    fail_message("description lines must be <= $body_char_limit chars");
+                }
+            }
+        }
+
+        if ( !defined($review) ) {
+            fail_message("a reviewer must be included");
+        }
+        else {
+            foreach my $reviewer ( split( /\n/, $review ) ) {
+                test(
+                    $reviewer,
+                    qr/^.*\ $email_re$/,
+                    "all reviewers must include an email"
+                );
+            }
+        }
+
+        if ( !defined($signed_off_by) ) {
+            fail_message("a sign off must be included");
+        }
+        else {
+            foreach my $signed_off_byer ( split( /\n/, $signed_off_by ) ) {
+                test(
+                    $signed_off_byer,
+                    qr/^.*\ $email_re$/,
+                    "all signers must include an email"
+                );
+            }
+        }
+    }
+    else {
+        fail_message("unable to parse commit message");
+    }
+}
+
+my $commit = "";
+
+if ( $0 =~ /^.*update$/ ) {
+    my $refname = $ARGV[0];
+    my $oldrev  = $ARGV[1];
+    my $newrev  = $ARGV[2];
+    my $revlist = `git rev-list $oldrev..$newrev`;
+
+    foreach my $rev ( split( /\n/, $revlist ) ) {
+        $commit = `git cat-file commit $rev`;
+        review_commit( $commit, $rev );
+    }
+}
+elsif ( $0 =~ /^.*commit-msg$/ ) {
+    $commit = `cat $ARGV[0]`;
+    review_commit( $commit, "pending-commit" );
+}
+else {
+    $commit = $ARGV[0];
+    review_commit( $commit, "manual" );
+    print color("blue"), "manual commit message was:\n", color("reset"),
+      "$commit\n";
+}
+
+exit $exit_code;

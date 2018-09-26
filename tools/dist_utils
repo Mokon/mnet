@@ -1,0 +1,122 @@
+#!/bin/sh
+# Copyright (c) 2018 David 'Mokon' Bond <mokon@mokon.net>
+# Author: David 'Mokon' Bond <mokon@mokon.net>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+function determine_dist {
+  if type lsb_release &> /dev/null ; then
+    dist=$(lsb_release -a | grep "Distributor ID" | awk {'print tolower($3)'})
+  else
+    dist=""
+  fi
+
+  if [ -z $dist ] && [ -f /etc/redhat-release ] ; then
+    if grep -q Fedora /etc/redhat-release; then
+      dist=fedora
+    fi
+
+    if grep -q CentOS /etc/redhat-release; then
+      dist=centos
+    fi
+  fi
+
+  if [ -z $dist ] && [ -f /etc/debian_version ] ; then
+    dist=debian
+  fi
+
+  if [ -z $dist ] && [ -f /etc/os-release ] ; then
+    dist="unknown"
+  fi
+
+  case $dist in
+    *fedora*|*centos*|*redhat*)
+      version=`sed -rn 's/VERSION_ID=(.*)/\1/p' /etc/os-release | sed 's/"//g'`
+
+      if [ "$version" -ge "22" ] && [ "$dist" == "fedora" ] ; then
+        pkg_mgmt=dnf
+      else
+        pkg_mgmt=yum
+      fi
+
+      ;;
+    *debian*|*ubuntu*)
+      pkg_mgmt=apt-get
+
+      ;;
+    *)
+      echo "Unknown distribution $dist!"
+      ;;
+  esac
+
+  export dist
+  export pkg_mgmt
+}
+
+determine_dist
+
+alias dist_install=${dist}_install
+alias ins=dist_install
+alias ${dist}_install=${pkg_mgmt}_install
+
+alias yum_install="sudo yum install -q -y"
+alias dnf_install="sudo dnf install -q -y"
+alias apt_install="sudo apt-get --yes --force-yes install -qq"
+
+function install_package {
+  dist_to_pkg=$1
+
+  eval "local pkg=\${$dist_to_pkg[$dist]}"
+
+  if [ "$pkg" == "skip" ]; then
+    return 0
+  fi
+
+  echo "Installing package '$pkg'"
+
+  dist_install $pkg 2>&1 | grep -v "already installed"
+}
+
+function parse_and_install_pkgs_file {
+  local pkgs_file=$1
+
+  while read -r fedora_pkg debian_pkg ubuntu_pkg centos_pkg; do
+    if [ -z "$debian_pkg" ] ; then
+      debian_pkg=$fedora_pkg
+    fi
+
+    if [ -z "$ubuntu_pkg" ] ; then
+      ubuntu_pkg=$debian_pkg
+    fi
+
+    if [ -z "$centos_pkg" ] ; then
+      centos_pkg=$fedora_pkg
+    fi
+
+    declare -A pkg_arr
+    pkg_arr=(
+      [fedora]="$fedora_pkg"
+      [centos]="$centos_pkg"
+      [debian]="$debian_pkg"
+      [ubuntu]="$ubuntu_pkg"
+    )
+
+    install_package pkg_arr
+
+  done < ${pkgs_file}
+}
