@@ -44,8 +44,13 @@ function determine_dist {
     dist="unknown"
   fi
 
+  if [ -z $dist ] ; then
+    dist=$(uname -a)
+  fi
+
   case $dist in
     *fedora*|*centos*|*redhat*)
+      pkg_type=rpm ;
       version=`sed -rn 's/VERSION_ID=(.*)/\1/p' /etc/os-release | sed 's/"//g'`
 
       if [ "$version" -ge "22" ] && [ "$dist" == "fedora" ] ; then
@@ -53,18 +58,15 @@ function determine_dist {
       else
         pkg_mgmt=yum
       fi
-
       ;;
-    *debian*|*ubuntu*)
-      pkg_mgmt=apt-get
-
-      ;;
-    *)
-      echo "Unknown distribution $dist!"
-      ;;
+    *redhat*) pkg_type=rpm ; pkg_mgmt=yum ;;
+    *Darwin*) dist=darwin ; pkg_type=pkg ; pkg_mgmt=brew ;;
+    *debian*|*ubuntu*) pkg_type=dpkg ; pkg_mgmt=apt ;;
+    *) pkg_type=unknown ; pkg_mgmt=unknown ; echo "Unknown Distribution" ;;
   esac
 
   export dist
+  export pkg_type
   export pkg_mgmt
 }
 
@@ -76,10 +78,11 @@ alias ${dist}_install=${pkg_mgmt}_install
 
 alias yum_install="sudo yum install -q -y"
 alias dnf_install="sudo dnf install -q -y"
+alias brew_install="sudo brew install -q -y"
 alias apt_install="sudo apt-get --yes --force-yes install -qq"
 
 function install_package {
-  dist_to_pkg=$1
+  local dist_to_pkg=$1
 
   eval "local pkg=\${$dist_to_pkg[$dist]}"
 
@@ -89,13 +92,14 @@ function install_package {
 
   echo "Installing package '$pkg'"
 
-  dist_install $pkg 2>&1 | grep -v "already installed"
+  dist_install $pkg 2>&1 | \
+    grep -v "already installed"
 }
 
 function parse_and_install_pkgs_file {
-  local pkgs_file=$1
+  local pkg_file=$1
 
-  while read -r fedora_pkg debian_pkg ubuntu_pkg centos_pkg; do
+  while read -r fedora_pkg debian_pkg ubuntu_pkg centos_pkg darwin_pkg; do
     if [ -z "$debian_pkg" ] ; then
       debian_pkg=$fedora_pkg
     fi
@@ -108,15 +112,22 @@ function parse_and_install_pkgs_file {
       centos_pkg=$fedora_pkg
     fi
 
-    declare -A pkg_arr
+    if [ -z "$darwin_pkg" ] ; then
+      darwin_pkg="skip"
+    fi
+
+    if [ $dist != "darwin" ] ; then
+      declare -A pkg_arr
+    fi
     pkg_arr=(
       [fedora]="$fedora_pkg"
       [centos]="$centos_pkg"
       [debian]="$debian_pkg"
       [ubuntu]="$ubuntu_pkg"
+      [darwin]="$darwin_pkg"
     )
 
     install_package pkg_arr
 
-  done < ${pkgs_file}
+  done < ${pkg_file}.pkgs
 }

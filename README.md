@@ -38,9 +38,11 @@ There are a number of targets including:
 
 * `build/release/linux`
 * `build/release/windows`
+* `build/release/apple`
 * `build/release/test`
 * `build/debug/linux`
 * `build/debug/windows`
+* `build/debug/apple`
 * `build/debug/test`
 
 Folders to these are generated and inside them the application is created.
@@ -55,5 +57,5 @@ Folders to these are generated and inside them the application is created.
 mnet uses gtest for unit tests.
 
 ##Contributing
-Please consider contributing. Individual applications will have sections on what
+Please consider contributing. Individual applications have sections on what
 needs to be done.

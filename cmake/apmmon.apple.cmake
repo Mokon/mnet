@@ -1,4 +1,3 @@
-#!/bin/sh
 # Copyright (c) 2018 David 'Mokon' Bond <mokon@mokon.net>
 # Author: David 'Mokon' Bond <mokon@mokon.net>
 #
@@ -19,8 +18,5 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-echo "Trying to install build prerequisites..."
-
-source ./tools/dist_utils
-
-parse_and_install_pkgs_file ./tools/build
+target_link_libraries(apmmon
+  pthread)

@@ -20,39 +20,13 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <Time.hpp>
-#include <sstream>
+#include <EventMonitor.hpp>
 
-namespace apm { namespace Time {
+namespace apm {
 
-TimePoint
-now()
+void
+EventMonitor::run()
 {
-    return Clock::now();
 }
 
-TimePoint
-from(struct timeval tv)
-{
-    return TimePoint{std::chrono::seconds{tv.tv_sec} +
-                     std::chrono::microseconds{tv.tv_usec}};
-}
-
-std::string
-toString(const apm::TimePoint& time)
-{
-    std::stringstream stream;
-    stream << time;
-    return stream.str();
-}
-
-}} // namespace apm::Time
-
-std::ostream&
-operator<<(std::ostream& stream, const apm::TimePoint& time)
-{
-    std::time_t epoch = std::chrono::duration_cast<std::chrono::seconds>(
-                            time.time_since_epoch())
-                            .count();
-    return stream << std::put_time(std::localtime(&epoch), "%F %T");
-}
+} // namespace apm

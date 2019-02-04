@@ -80,6 +80,10 @@ The windows event monitoring code makes use of the windows api keyboard and
 mouse low level hooks. It registers with these and implements a message loop.
 This can be exited with a ctrl c or ctrl break signal.
 
+####Apple
+This code is just a stub for now and should be expanded for those interested in
+this working on an apple as well.
+
 ##Testing
 Currently linux and windows extension code is not tested as those come from the
 OS. It would be nice to mock the OS calls out so they can be tested as well.

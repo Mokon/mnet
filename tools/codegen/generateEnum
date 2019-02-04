@@ -33,9 +33,9 @@ while read -r line || [[ -n "$line" ]]; do
     EnumCodes+="    $code,\n"
     EnumSwitch+="            case $EnumName::$code:\n                return \"$code\";\n"
   fi
-done <<< "$(sed -r ':a;$!{N;ba};s|/\*[^*]*\*+([^/*][^*]*\*+)*/||' ../../../$EnumFile)"
-EnumCodes=${EnumCodes::-2}
-EnumSwitch=${EnumSwitch::-2}
+done <<< "$(gsed -r ':a;$!{N;ba};s|/\*[^*]*\*+([^/*][^*]*\*+)*/||' ../../../$EnumFile)"
+EnumCodes=${EnumCodes::${#EnumCodes}-2}
+EnumSwitch=${EnumSwitch::${#EnumSwitch}-2}
 
 mkdir -p $EnumDir
 while IFS='' read -r line || [[ -n "$line" ]]; do
